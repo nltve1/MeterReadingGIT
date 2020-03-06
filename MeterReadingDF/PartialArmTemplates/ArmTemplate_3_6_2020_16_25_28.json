@@ -1,0 +1,205 @@
+{
+	"$schema": "http://schema.management.azure.com/schemas/2015-01-01/deploymentTemplate.json#",
+	"contentVersion": "1.0.0.0",
+	"parameters": {
+		"factoryName": {
+			"type": "string",
+			"metadata": "Data Factory name",
+			"defaultValue": "MeterReadingDF"
+		}
+	},
+	"variables": {
+		"factoryId": "[concat('Microsoft.DataFactory/factories/', parameters('factoryName'))]"
+	},
+	"resources": [
+		{
+			"name": "[concat(parameters('factoryName'), '/pipeline1')]",
+			"type": "Microsoft.DataFactory/factories/pipelines",
+			"apiVersion": "2018-06-01",
+			"properties": {
+				"activities": [
+					{
+						"name": "dataflow1",
+						"type": "ExecuteDataFlow",
+						"dependsOn": [],
+						"policy": {
+							"timeout": "7.00:00:00",
+							"retry": 0,
+							"retryIntervalInSeconds": 30,
+							"secureOutput": false,
+							"secureInput": false
+						},
+						"userProperties": [],
+						"typeProperties": {
+							"dataflow": {
+								"referenceName": "dataflow1",
+								"type": "DataFlowReference"
+							},
+							"compute": {
+								"coreCount": 8,
+								"computeType": "General"
+							}
+						}
+					}
+				],
+				"annotations": []
+			},
+			"dependsOn": [
+				"[concat(variables('factoryId'), '/dataflows/dataflow1')]"
+			]
+		},
+		{
+			"name": "[concat(parameters('factoryName'), '/AzureSQLMeterReadingDB')]",
+			"type": "Microsoft.DataFactory/factories/datasets",
+			"apiVersion": "2018-06-01",
+			"properties": {
+				"linkedServiceName": {
+					"referenceName": "AzureSQLMeterReadingDB",
+					"type": "LinkedServiceReference"
+				},
+				"annotations": [],
+				"type": "AzureSqlTable",
+				"schema": [
+					{
+						"name": "timestamp",
+						"type": "datetime2",
+						"scale": 7
+					},
+					{
+						"name": "current_consumption",
+						"type": "int",
+						"precision": 10
+					},
+					{
+						"name": "current_rate",
+						"type": "nchar"
+					},
+					{
+						"name": "current_back",
+						"type": "int",
+						"precision": 10
+					},
+					{
+						"name": "total_low",
+						"type": "decimal",
+						"precision": 8,
+						"scale": 3
+					},
+					{
+						"name": "back_high",
+						"type": "decimal",
+						"precision": 8,
+						"scale": 3
+					},
+					{
+						"name": "total_high",
+						"type": "decimal",
+						"precision": 8,
+						"scale": 3
+					},
+					{
+						"name": "gas",
+						"type": "decimal",
+						"precision": 7,
+						"scale": 3
+					},
+					{
+						"name": "back_low",
+						"type": "decimal",
+						"precision": 8,
+						"scale": 3
+					}
+				],
+				"typeProperties": {
+					"schema": "dbo",
+					"table": "MeterReadEvents"
+				}
+			},
+			"dependsOn": []
+		},
+		{
+			"name": "[concat(parameters('factoryName'), '/AzureSQLMeterReadingDB_Aggregate')]",
+			"type": "Microsoft.DataFactory/factories/datasets",
+			"apiVersion": "2018-06-01",
+			"properties": {
+				"linkedServiceName": {
+					"referenceName": "AzureSQLMeterReadingDB",
+					"type": "LinkedServiceReference"
+				},
+				"annotations": [],
+				"type": "AzureSqlTable",
+				"schema": [
+					{
+						"name": "max_timestamp",
+						"type": "datetime",
+						"precision": 23,
+						"scale": 3
+					},
+					{
+						"name": "avg_consumption",
+						"type": "decimal",
+						"precision": 6,
+						"scale": 1
+					},
+					{
+						"name": "total_consumption_low",
+						"type": "decimal",
+						"precision": 8,
+						"scale": 3
+					},
+					{
+						"name": "total_consumption_high",
+						"type": "decimal",
+						"precision": 8,
+						"scale": 3
+					},
+					{
+						"name": "total_consumption_gas",
+						"type": "decimal",
+						"precision": 7,
+						"scale": 3
+					}
+				],
+				"typeProperties": {
+					"schema": "dbo",
+					"table": "MeterReadings"
+				}
+			},
+			"dependsOn": []
+		},
+		{
+			"name": "[concat(parameters('factoryName'), '/dataflow1')]",
+			"type": "Microsoft.DataFactory/factories/dataflows",
+			"apiVersion": "2018-06-01",
+			"properties": {
+				"type": "MappingDataFlow",
+				"typeProperties": {
+					"sources": [
+						{
+							"dataset": {
+								"referenceName": "AzureSQLMeterReadingDB",
+								"type": "DatasetReference"
+							},
+							"name": "MeterReadingEvents"
+						}
+					],
+					"sinks": [
+						{
+							"dataset": {
+								"referenceName": "AzureSQLMeterReadingDB_Aggregate",
+								"type": "DatasetReference"
+							},
+							"name": "MeterReadingDB"
+						}
+					],
+					"transformations": [],
+					"script": "source(output(\n\t\tmax_timestamp as timestamp,\n\t\tavg_consumption as integer,\n\t\ttotal_consumption_low as decimal(9,3),\n\t\ttotal_consumption_high as decimal(9,3),\n\t\ttotal_consumption_gas as decimal(8,3)\n\t),\n\tallowSchemaDrift: false,\n\tvalidateSchema: false,\n\tisolationLevel: 'READ_UNCOMMITTED',\n\tquery: 'SELECT  max(timestamp) as max_timestamp, \\n        avg(current_consumption) as avg_consumption, \\n        max(total_low) - lag(max(total_low), 1, 0) OVER (ORDER BY max(timestamp)) as total_consumption_low,\\n        max(total_high) - lag(max(total_high), 1, 0) OVER (ORDER BY max(timestamp)) as total_consumption_high, \\n        max(gas) - lag(max(gas), 1, 0) OVER (ORDER BY max(timestamp)) as total_consumption_gas\\nFROM [dbo].[MeterReadEvents]\\nWHERE CONVERT(date, timestamp) < CONVERT(date, getdate())\\nGROUP BY DATEPART(HOUR, timestamp), CONVERT(date, timestamp)',\n\tformat: 'query') ~> MeterReadingEvents\nMeterReadingEvents sink(input(\n\t\tmax_timestamp as timestamp,\n\t\tavg_consumption as decimal(6,1),\n\t\ttotal_consumption_low as decimal(8,3),\n\t\ttotal_consumption_high as decimal(8,3),\n\t\ttotal_consumption_gas as decimal(7,3)\n\t),\n\tallowSchemaDrift: false,\n\tvalidateSchema: false,\n\tdeletable:false,\n\tinsertable:true,\n\tupdateable:false,\n\tupsertable:false,\n\tformat: 'table',\n\tskipDuplicateMapInputs: true,\n\tskipDuplicateMapOutputs: true) ~> MeterReadingDB"
+				}
+			},
+			"dependsOn": [
+				"[concat(variables('factoryId'), '/datasets/AzureSQLMeterReadingDB')]",
+				"[concat(variables('factoryId'), '/datasets/AzureSQLMeterReadingDB_Aggregate')]"
+			]
+		}
+	]
+}
