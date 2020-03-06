@@ -1,0 +1,66 @@
+{
+	"name": "AzureSQLMeterReadingDB",
+	"properties": {
+		"linkedServiceName": {
+			"referenceName": "AzureSQLMeterReadingDB",
+			"type": "LinkedServiceReference"
+		},
+		"annotations": [],
+		"type": "AzureSqlTable",
+		"schema": [
+			{
+				"name": "timestamp",
+				"type": "datetime2",
+				"scale": 7
+			},
+			{
+				"name": "current_consumption",
+				"type": "int",
+				"precision": 10
+			},
+			{
+				"name": "current_rate",
+				"type": "nchar"
+			},
+			{
+				"name": "current_back",
+				"type": "int",
+				"precision": 10
+			},
+			{
+				"name": "total_low",
+				"type": "decimal",
+				"precision": 8,
+				"scale": 3
+			},
+			{
+				"name": "back_high",
+				"type": "decimal",
+				"precision": 8,
+				"scale": 3
+			},
+			{
+				"name": "total_high",
+				"type": "decimal",
+				"precision": 8,
+				"scale": 3
+			},
+			{
+				"name": "gas",
+				"type": "decimal",
+				"precision": 7,
+				"scale": 3
+			},
+			{
+				"name": "back_low",
+				"type": "decimal",
+				"precision": 8,
+				"scale": 3
+			}
+		],
+		"typeProperties": {
+			"schema": "dbo",
+			"table": "MeterReadEvents"
+		}
+	}
+}
