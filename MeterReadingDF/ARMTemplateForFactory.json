@@ -274,6 +274,38 @@
 			"dependsOn": [
 				"[concat(variables('factoryId'), '/dataflows/MeterReadDAYDF')]"
 			]
+		},
+		{
+			"name": "[concat(parameters('factoryName'), '/DailyAggregateLoad')]",
+			"type": "Microsoft.DataFactory/factories/triggers",
+			"apiVersion": "2018-06-01",
+			"properties": {
+				"description": "Dagelijkse load om de Meter Read Events te aggregeren naar uur niveau",
+				"annotations": [],
+				"runtimeState": "Started",
+				"pipelines": [
+					{
+						"pipelineReference": {
+							"referenceName": "MeterReadAggrbyHourPipeLine",
+							"type": "PipelineReference"
+						},
+						"parameters": {}
+					}
+				],
+				"type": "ScheduleTrigger",
+				"typeProperties": {
+					"recurrence": {
+						"frequency": "Day",
+						"interval": 1,
+						"startTime": "2020-03-07T01:00:00.000Z",
+						"timeZone": "UTC",
+						"schedule": {}
+					}
+				}
+			},
+			"dependsOn": [
+				"[concat(variables('factoryId'), '/pipelines/MeterReadAggrbyHourPipeLine')]"
+			]
 		}
 	]
 }
