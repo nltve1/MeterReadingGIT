@@ -12,9 +12,17 @@
 					"name": "MeterReadingEvents"
 				}
 			],
-			"sinks": [],
+			"sinks": [
+				{
+					"dataset": {
+						"referenceName": "AzureSQLMeterReadingDB_Aggregate",
+						"type": "DatasetReference"
+					},
+					"name": "MeterReadingDB"
+				}
+			],
 			"transformations": [],
-			"script": "source(allowSchemaDrift: false,\n\tvalidateSchema: false,\n\tisolationLevel: 'READ_UNCOMMITTED',\n\tquery: 'SELECT  max(timestamp) as max_timestamp, \\n        avg(current_consumption) as avg_consumption, \\n        max(total_low) - lag(max(total_low), 1, 0) OVER (ORDER BY max(timestamp)) as total_consumption_low,\\n        max(total_high) - lag(max(total_high), 1, 0) OVER (ORDER BY max(timestamp)) as total_consumption_high, \\n        max(gas) - lag(max(gas), 1, 0) OVER (ORDER BY max(timestamp)) as total_consumption_gas\\nFROM [dbo].[MeterReadEvents]\\nWHERE CONVERT(date, timestamp) < CONVERT(date, getdate())\\nGROUP BY DATEPART(HOUR, timestamp), CONVERT(date, timestamp) ORDER BY (max_timestamp)',\n\tformat: 'query') ~> MeterReadingEvents"
+			"script": "source(allowSchemaDrift: false,\n\tvalidateSchema: false,\n\tisolationLevel: 'READ_UNCOMMITTED',\n\tquery: 'SELECT  max(timestamp) as max_timestamp, \\n        avg(current_consumption) as avg_consumption, \\n        max(total_low) - lag(max(total_low), 1, 0) OVER (ORDER BY max(timestamp)) as total_consumption_low,\\n        max(total_high) - lag(max(total_high), 1, 0) OVER (ORDER BY max(timestamp)) as total_consumption_high, \\n        max(gas) - lag(max(gas), 1, 0) OVER (ORDER BY max(timestamp)) as total_consumption_gas\\nFROM [dbo].[MeterReadEvents]\\nWHERE CONVERT(date, timestamp) < CONVERT(date, getdate())\\nGROUP BY DATEPART(HOUR, timestamp), CONVERT(date, timestamp) ORDER BY (max_timestamp)',\n\tformat: 'query') ~> MeterReadingEvents\nMeterReadingEvents sink(input(\n\t\tmax_timestamp as timestamp,\n\t\tavg_consumption as decimal(6,1),\n\t\ttotal_consumption_low as decimal(8,3),\n\t\ttotal_consumption_high as decimal(8,3),\n\t\ttotal_consumption_gas as decimal(7,3)\n\t),\n\tallowSchemaDrift: false,\n\tvalidateSchema: false,\n\tdeletable:false,\n\tinsertable:true,\n\tupdateable:false,\n\tupsertable:false,\n\tformat: 'table',\n\tskipDuplicateMapInputs: true,\n\tskipDuplicateMapOutputs: true) ~> MeterReadingDB"
 		}
 	}
 }

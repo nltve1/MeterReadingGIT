@@ -1,0 +1,47 @@
+{
+	"name": "AzureSQLMeterReadingDB_Aggregate",
+	"properties": {
+		"linkedServiceName": {
+			"referenceName": "AzureSQLMeterReadingDB",
+			"type": "LinkedServiceReference"
+		},
+		"annotations": [],
+		"type": "AzureSqlTable",
+		"schema": [
+			{
+				"name": "max_timestamp",
+				"type": "datetime",
+				"precision": 23,
+				"scale": 3
+			},
+			{
+				"name": "avg_consumption",
+				"type": "decimal",
+				"precision": 6,
+				"scale": 1
+			},
+			{
+				"name": "total_consumption_low",
+				"type": "decimal",
+				"precision": 8,
+				"scale": 3
+			},
+			{
+				"name": "total_consumption_high",
+				"type": "decimal",
+				"precision": 8,
+				"scale": 3
+			},
+			{
+				"name": "total_consumption_gas",
+				"type": "decimal",
+				"precision": 7,
+				"scale": 3
+			}
+		],
+		"typeProperties": {
+			"schema": "dbo",
+			"table": "MeterReadings"
+		}
+	}
+}
