@@ -3,7 +3,7 @@
 	"properties": {
 		"description": "Dagelijkse load om de Meter Read Events te aggregeren naar uur niveau",
 		"annotations": [],
-		"runtimeState": "Started",
+		"runtimeState": "Stopped",
 		"pipelines": [
 			{
 				"pipelineReference": {
