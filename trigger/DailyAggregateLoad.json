@@ -4,14 +4,7 @@
 		"description": "Dagelijkse load om de Meter Read Events te aggregeren naar uur niveau",
 		"annotations": [],
 		"runtimeState": "Stopped",
-		"pipelines": [
-			{
-				"pipelineReference": {
-					"referenceName": "MeterReadAggrbyHourPipeLine",
-					"type": "PipelineReference"
-				}
-			}
-		],
+		"pipelines": [],
 		"type": "ScheduleTrigger",
 		"typeProperties": {
 			"recurrence": {
