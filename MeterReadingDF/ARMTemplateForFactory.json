@@ -5,7 +5,7 @@
 		"factoryName": {
 			"type": "string",
 			"metadata": "Data Factory name",
-			"defaultValue": "MeterReadingDF"
+			"defaultValue": "meterreadingdf"
 		},
 		"AzureSQLMeterReadingDB_connectionString": {
 			"type": "secureString",
@@ -16,6 +16,49 @@
 		"factoryId": "[concat('Microsoft.DataFactory/factories/', parameters('factoryName'))]"
 	},
 	"resources": [
+		{
+			"name": "[concat(parameters('factoryName'), '/MeterReadAggrbyHourPipeLine')]",
+			"type": "Microsoft.DataFactory/factories/pipelines",
+			"apiVersion": "2018-06-01",
+			"properties": {
+				"activities": [
+					{
+						"name": "MeterReadDAYDF",
+						"type": "ExecuteDataFlow",
+						"dependsOn": [],
+						"policy": {
+							"timeout": "7.00:00:00",
+							"retry": 0,
+							"retryIntervalInSeconds": 30,
+							"secureOutput": false,
+							"secureInput": false
+						},
+						"userProperties": [],
+						"typeProperties": {
+							"dataflow": {
+								"referenceName": "MeterReadDAYDF",
+								"type": "DataFlowReference",
+								"parameters": {},
+								"datasetParameters": {
+									"MeterReadingEvents": {},
+									"MeterReadingDB": {}
+								}
+							},
+							"staging": {},
+							"compute": {
+								"coreCount": 8,
+								"computeType": "General"
+							},
+							"traceLevel": "Fine"
+						}
+					}
+				],
+				"annotations": []
+			},
+			"dependsOn": [
+				"[concat(variables('factoryId'), '/dataflows/MeterReadDAYDF')]"
+			]
+		},
 		{
 			"name": "[concat(parameters('factoryName'), '/AzureSQLMeterReadingDB')]",
 			"type": "Microsoft.DataFactory/factories/datasets",
@@ -199,6 +242,38 @@
 			"dependsOn": []
 		},
 		{
+			"name": "[concat(parameters('factoryName'), '/DailyAggregateLoad')]",
+			"type": "Microsoft.DataFactory/factories/triggers",
+			"apiVersion": "2018-06-01",
+			"properties": {
+				"description": "Dagelijkse load om de Meter Read Events te aggregeren naar uur niveau",
+				"annotations": [],
+				"runtimeState": "Stopped",
+				"pipelines": [
+					{
+						"pipelineReference": {
+							"referenceName": "MeterReadAggrbyHourPipeLine",
+							"type": "PipelineReference"
+						},
+						"parameters": {}
+					}
+				],
+				"type": "ScheduleTrigger",
+				"typeProperties": {
+					"recurrence": {
+						"frequency": "Day",
+						"interval": 1,
+						"startTime": "2020-03-07T01:00:00Z",
+						"timeZone": "UTC",
+						"schedule": {}
+					}
+				}
+			},
+			"dependsOn": [
+				"[concat(variables('factoryId'), '/pipelines/MeterReadAggrbyHourPipeLine')]"
+			]
+		},
+		{
 			"name": "[concat(parameters('factoryName'), '/MeterReadDAYDF')]",
 			"type": "Microsoft.DataFactory/factories/dataflows",
 			"apiVersion": "2018-06-01",
@@ -225,86 +300,12 @@
 						}
 					],
 					"transformations": [],
-					"script": "source(output(\n\t\tmax_timestamp as timestamp,\n\t\tavg_consumption as integer,\n\t\ttotal_consumption_low as decimal(9,3),\n\t\ttotal_consumption_high as decimal(9,3),\n\t\ttotal_consumption_gas as decimal(8,3),\n\t\ttotal_low as decimal(8,3),\n\t\ttotal_high as decimal(8,3),\n\t\ttotal_gas as decimal(7,3),\n\t\ttotal_back_low as decimal(9,3),\n\t\ttotal_back_high as decimal(9,3),\n\t\tback_low as decimal(8,3),\n\t\tback_high as decimal(8,3),\n\t\tinterval_hours as integer\n\t),\n\tallowSchemaDrift: false,\n\tvalidateSchema: false,\n\tisolationLevel: 'READ_UNCOMMITTED',\n\tquery: 'SELECT  max(timestamp) as max_timestamp, \\n        avg(current_consumption) as avg_consumption, \\n        max(total_low) - lag(max(total_low), 1, 0) OVER (ORDER BY max(timestamp)) as total_consumption_low,         \\n        max(total_high) - lag(max(total_high), 1, 0) OVER (ORDER BY max(timestamp)) as total_consumption_high, \\n        max(gas) - lag(max(gas), 1, 0) OVER (ORDER BY max(timestamp)) as total_consumption_gas,\\n        max(total_low) as total_low,\\n        max(total_high) as total_high,\\n        max(gas) as total_gas,\\n        max(back_low) - lag(max(back_low), 1, 0) OVER (ORDER BY max(timestamp)) as total_back_low,\\n        max(back_high) - lag(max(back_high), 1, 0) OVER (ORDER BY max(timestamp)) as total_back_high,\\n        max(back_low) as back_low,\\n        max(back_high) as back_high,\\n        DATEDIFF(hour, lag(max(timestamp)) OVER (ORDER BY max(timestamp)), max(timestamp)) as interval_hours\\nFROM [dbo].[MeterReadEvents]\\nWHERE CONVERT(date, timestamp) < CONVERT(date, getdate())\\nGROUP BY DATEPART(HOUR, timestamp), CONVERT(date, timestamp)',\n\tformat: 'query') ~> MeterReadingEvents\nMeterReadingEvents sink(input(\n\t\tmax_timestamp as timestamp,\n\t\tavg_consumption as long,\n\t\ttotal_consumption_low as decimal(8,3),\n\t\ttotal_consumption_high as decimal(8,3),\n\t\ttotal_consumption_gas as decimal(7,3),\n\t\ttotal_low as decimal(8,3),\n\t\ttotal_high as decimal(8,3),\n\t\ttotal_gas as decimal(7,3),\n\t\ttotal_back_low as decimal(8,3),\n\t\ttotal_back_high as decimal(8,3),\n\t\tback_low as decimal(8,3),\n\t\tback_high as decimal(8,3),\n\t\tinterval_hours as long\n\t),\n\tallowSchemaDrift: false,\n\tvalidateSchema: false,\n\tdeletable:false,\n\tinsertable:true,\n\tupdateable:false,\n\tupsertable:false,\n\tformat: 'table',\n\tpostSQLs:['DELETE FROM [dbo].[MeterReadEvents] WHERE timestamp < CONVERT(date, getdate())'],\n\tskipDuplicateMapInputs: true,\n\tskipDuplicateMapOutputs: true) ~> MeterReadingDB"
+					"script": "source(output(\n\t\tmax_timestamp as timestamp,\n\t\tavg_consumption as integer,\n\t\ttotal_consumption_low as decimal(9,3),\n\t\ttotal_consumption_high as decimal(9,3),\n\t\ttotal_consumption_gas as decimal(8,3),\n\t\ttotal_low as decimal(8,3),\n\t\ttotal_high as decimal(8,3),\n\t\ttotal_gas as decimal(7,3),\n\t\ttotal_back_low as decimal(9,3),\n\t\ttotal_back_high as decimal(9,3),\n\t\tback_low as decimal(8,3),\n\t\tback_high as decimal(8,3),\n\t\tinterval_hours as integer\n\t),\n\tallowSchemaDrift: false,\n\tvalidateSchema: false,\n\tignoreNoFilesFound: false,\n\tisolationLevel: 'READ_UNCOMMITTED',\n\tquery: 'SELECT  max(timestamp) as max_timestamp, \\n        avg(current_consumption) as avg_consumption, \\n        max(total_low) - lag(max(total_low), 1, 0) OVER (ORDER BY max(timestamp)) as total_consumption_low,         \\n        max(total_high) - lag(max(total_high), 1, 0) OVER (ORDER BY max(timestamp)) as total_consumption_high, \\n        max(gas) - lag(max(gas), 1, 0) OVER (ORDER BY max(timestamp)) as total_consumption_gas,\\n        max(total_low) as total_low,\\n        max(total_high) as total_high,\\n        max(gas) as total_gas,\\n        max(back_low) - lag(max(back_low), 1, 0) OVER (ORDER BY max(timestamp)) as total_back_low,\\n        max(back_high) - lag(max(back_high), 1, 0) OVER (ORDER BY max(timestamp)) as total_back_high,\\n        max(back_low) as back_low,\\n        max(back_high) as back_high,\\n        DATEDIFF(hour, lag(max(timestamp)) OVER (ORDER BY max(timestamp)), max(timestamp)) as interval_hours\\nFROM [dbo].[MeterReadEvents]\\nWHERE CONVERT(date, timestamp) < CONVERT(date, getdate())\\nGROUP BY DATEPART(HOUR, timestamp), CONVERT(date, timestamp)',\n\tformat: 'query') ~> MeterReadingEvents\nMeterReadingEvents sink(input(\n\t\tmax_timestamp as timestamp,\n\t\tavg_consumption as long,\n\t\ttotal_consumption_low as decimal(8,3),\n\t\ttotal_consumption_high as decimal(8,3),\n\t\ttotal_consumption_gas as decimal(7,3),\n\t\ttotal_low as decimal(8,3),\n\t\ttotal_high as decimal(8,3),\n\t\ttotal_gas as decimal(7,3),\n\t\ttotal_back_low as decimal(8,3),\n\t\ttotal_back_high as decimal(8,3),\n\t\tback_low as decimal(8,3),\n\t\tback_high as decimal(8,3),\n\t\tinterval_hours as long\n\t),\n\tallowSchemaDrift: false,\n\tvalidateSchema: false,\n\tdeletable:false,\n\tinsertable:true,\n\tupdateable:false,\n\tupsertable:false,\n\tformat: 'table',\n\tpostSQLs:['DELETE FROM [dbo].[MeterReadEvents] WHERE timestamp < CONVERT(date, getdate())'],\n\tskipDuplicateMapInputs: true,\n\tskipDuplicateMapOutputs: true,\n\terrorHandlingOption: 'stopOnFirstError') ~> MeterReadingDB"
 				}
 			},
 			"dependsOn": [
 				"[concat(variables('factoryId'), '/datasets/AzureSQLMeterReadingDB')]",
 				"[concat(variables('factoryId'), '/datasets/AzureSQLMeterReadingDB_Aggregate')]"
-			]
-		},
-		{
-			"name": "[concat(parameters('factoryName'), '/MeterReadAggrbyHourPipeLine')]",
-			"type": "Microsoft.DataFactory/factories/pipelines",
-			"apiVersion": "2018-06-01",
-			"properties": {
-				"activities": [
-					{
-						"name": "MeterReadDAYDF",
-						"type": "ExecuteDataFlow",
-						"dependsOn": [],
-						"policy": {
-							"timeout": "7.00:00:00",
-							"retry": 0,
-							"retryIntervalInSeconds": 30,
-							"secureOutput": false,
-							"secureInput": false
-						},
-						"userProperties": [],
-						"typeProperties": {
-							"dataflow": {
-								"referenceName": "MeterReadDAYDF",
-								"type": "DataFlowReference",
-								"parameters": {},
-								"datasetParameters": {
-									"MeterReadingEvents": {},
-									"MeterReadingDB": {}
-								}
-							},
-							"staging": {},
-							"compute": {
-								"coreCount": 8,
-								"computeType": "General"
-							}
-						}
-					}
-				],
-				"annotations": []
-			},
-			"dependsOn": [
-				"[concat(variables('factoryId'), '/dataflows/MeterReadDAYDF')]"
-			]
-		},
-		{
-			"name": "[concat(parameters('factoryName'), '/DailyAggregateLoad')]",
-			"type": "Microsoft.DataFactory/factories/triggers",
-			"apiVersion": "2018-06-01",
-			"properties": {
-				"description": "Dagelijkse load om de Meter Read Events te aggregeren naar uur niveau",
-				"annotations": [],
-				"runtimeState": "Started",
-				"pipelines": [
-					{
-						"pipelineReference": {
-							"referenceName": "MeterReadAggrbyHourPipeLine",
-							"type": "PipelineReference"
-						},
-						"parameters": {}
-					}
-				],
-				"type": "ScheduleTrigger",
-				"typeProperties": {
-					"recurrence": {
-						"frequency": "Day",
-						"interval": 1,
-						"startTime": "2020-03-07T01:00:00.000Z",
-						"timeZone": "UTC",
-						"schedule": {}
-					}
-				}
-			},
-			"dependsOn": [
-				"[concat(variables('factoryId'), '/pipelines/MeterReadAggrbyHourPipeLine')]"
 			]
 		}
 	]
